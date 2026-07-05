@@ -12,8 +12,18 @@ connectDB();
 const app = express();
 
 // Middlewares
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    /\.netlify\.app$/,
+    /\.netlify\.live$/,
+    /\.vercel\.app$/,
+    /\.vercel\.live$/
+  ],
+  credentials: true
+}));
+app.use(express.json({ limit: "10mb" })); // Increased for base64 audio notes
 
 // Mount API routes
 app.use("/api/family", require("./routes/family"));

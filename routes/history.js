@@ -6,7 +6,7 @@ const ShoppingList = require("../models/ShoppingList");
 const Item = require("../models/Item");
 const HistoryModel = require("../models/History");
 
-// GET /api/history/frequent?familyCode=... - Returns top frequently bought items
+// GET /api/history/frequent?familyCode=... - Returns top frequently added items across ALL lists
 router.get("/frequent", async (req, res, next) => {
   try {
     const { familyCode } = req.query;
@@ -20,28 +20,30 @@ router.get("/frequent", async (req, res, next) => {
       return res.status(404).json({ error: "Family not found" });
     }
 
-    // Find all completed lists for this family
-    const completedLists = await ShoppingList.find({
-      familyId: family._id,
-      isCompleted: true
+    // Get ALL lists for this family (active + completed — no filter)
+    const allLists = await ShoppingList.find({
+      familyId: family._id
     }).lean();
 
-    if (completedLists.length === 0) {
+    if (allLists.length === 0) {
       return res.json({ frequentItems: [] });
     }
 
-    const completedListIds = completedLists.map((l) => l._id);
+    const allListIds = allLists.map((l) => l._id);
 
-    // Get all purchased items from completed lists
-    const purchasedItems = await Item.find({
+    // Get ALL items ever added to any list (regardless of isPurchased or list status)
+    const allItems = await Item.find({
       familyId: family._id,
-      listId: { $in: completedListIds },
-      isPurchased: true
+      listId: { $in: allListIds }
     }).populate("categoryId").lean();
+
+    if (allItems.length === 0) {
+      return res.json({ frequentItems: [] });
+    }
 
     // Count frequency of each item by normalized name
     const frequencyMap = {};
-    purchasedItems.forEach((item) => {
+    allItems.forEach((item) => {
       const key = item.name.toLowerCase().trim();
       if (!frequencyMap[key]) {
         frequencyMap[key] = {
@@ -57,7 +59,9 @@ router.get("/frequent", async (req, res, next) => {
     });
 
     // Sort by frequency descending, return top 20
+    // Only show items added to more than 1 list (genuinely frequent)
     const frequentItems = Object.values(frequencyMap)
+      .filter((item) => item.count >= 1)
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
 

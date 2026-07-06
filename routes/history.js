@@ -6,6 +6,67 @@ const ShoppingList = require("../models/ShoppingList");
 const Item = require("../models/Item");
 const HistoryModel = require("../models/History");
 
+// GET /api/history/frequent?familyCode=... - Returns top frequently bought items
+router.get("/frequent", async (req, res, next) => {
+  try {
+    const { familyCode } = req.query;
+
+    if (!familyCode || familyCode.length !== 6) {
+      return res.status(400).json({ error: "Invalid family code" });
+    }
+
+    const family = await Family.findOne({ code: familyCode.toUpperCase() });
+    if (!family) {
+      return res.status(404).json({ error: "Family not found" });
+    }
+
+    // Find all completed lists for this family
+    const completedLists = await ShoppingList.find({
+      familyId: family._id,
+      isCompleted: true
+    }).lean();
+
+    if (completedLists.length === 0) {
+      return res.json({ frequentItems: [] });
+    }
+
+    const completedListIds = completedLists.map((l) => l._id);
+
+    // Get all purchased items from completed lists
+    const purchasedItems = await Item.find({
+      familyId: family._id,
+      listId: { $in: completedListIds },
+      isPurchased: true
+    }).populate("categoryId").lean();
+
+    // Count frequency of each item by normalized name
+    const frequencyMap = {};
+    purchasedItems.forEach((item) => {
+      const key = item.name.toLowerCase().trim();
+      if (!frequencyMap[key]) {
+        frequencyMap[key] = {
+          name: item.name,
+          count: 0,
+          unit: item.unit,
+          quantity: item.quantity,
+          categoryId: item.categoryId,
+          estimatedCost: item.estimatedCost || 0
+        };
+      }
+      frequencyMap[key].count += 1;
+    });
+
+    // Sort by frequency descending, return top 20
+    const frequentItems = Object.values(frequencyMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    return res.json({ frequentItems });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/history?familyCode=...
 router.get("/", async (req, res, next) => {
   try {

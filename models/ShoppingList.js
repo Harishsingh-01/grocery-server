@@ -6,7 +6,7 @@ const ShoppingListSchema = new mongoose.Schema(
     name: { type: String, required: true },
     type: { 
       type: String, 
-      enum: ["today", "weekly", "monthly", "custom"], 
+      enum: ["today", "weekly", "monthly", "custom", "template"], 
       default: "custom" 
     },
     status: { 

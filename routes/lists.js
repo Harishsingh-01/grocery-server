@@ -87,6 +87,121 @@ router.delete("/", async (req, res, next) => {
   }
 });
 
+// GET /api/lists/templates - Get all templates
+router.get("/templates", async (req, res, next) => {
+  try {
+    const { familyCode } = req.query;
+    if (!familyCode || familyCode.length !== 6) {
+      return res.status(400).json({ error: "Invalid family code" });
+    }
+
+    const family = await Family.findOne({ code: familyCode.toUpperCase() });
+    if (!family) {
+      return res.status(404).json({ error: "Family not found" });
+    }
+
+    const templates = await ShoppingList.find({
+      familyId: family._id,
+      type: "template"
+    });
+
+    return res.json({ templates });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/lists/template - Save current list as template
+router.post("/template", async (req, res, next) => {
+  try {
+    const { familyCode, sourceListId, templateName } = req.body;
+    if (!familyCode || !sourceListId || !templateName) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const family = await Family.findOne({ code: familyCode.toUpperCase() });
+    if (!family) {
+      return res.status(404).json({ error: "Family not found" });
+    }
+
+    const sourceList = await ShoppingList.findOne({ _id: sourceListId, familyId: family._id });
+    if (!sourceList) {
+      return res.status(404).json({ error: "Source list not found" });
+    }
+
+    const newTemplate = new ShoppingList({
+      familyId: family._id,
+      name: templateName.trim(),
+      type: "template",
+      status: "active",
+      isCompleted: false
+    });
+    await newTemplate.save();
+
+    const sourceItems = await Item.find({ listId: sourceListId, familyId: family._id }).lean();
+    const copiedItems = sourceItems.map((item) => ({
+      familyId: family._id,
+      listId: newTemplate._id,
+      categoryId: item.categoryId,
+      subcategory: item.subcategory,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      notes: item.notes || "",
+      isPurchased: false,
+      isFavorite: item.isFavorite || false,
+      estimatedCost: item.estimatedCost || 0
+    }));
+
+    if (copiedItems.length > 0) {
+      await Item.insertMany(copiedItems);
+    }
+
+    return res.status(201).json({ success: true, template: newTemplate });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/lists/apply-template - Apply template to active list
+router.post("/apply-template", async (req, res, next) => {
+  try {
+    const { familyCode, templateId, targetListId } = req.body;
+    if (!familyCode || !templateId || !targetListId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const family = await Family.findOne({ code: familyCode.toUpperCase() });
+    if (!family) {
+      return res.status(404).json({ error: "Family not found" });
+    }
+
+    const templateItems = await Item.find({ listId: templateId, familyId: family._id }).lean();
+    if (templateItems.length === 0) {
+      return res.status(400).json({ error: "Template is empty" });
+    }
+
+    const newItems = templateItems.map((item) => ({
+      familyId: family._id,
+      listId: targetListId,
+      categoryId: item.categoryId,
+      subcategory: item.subcategory,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      notes: item.notes || "",
+      isPurchased: false,
+      isFavorite: item.isFavorite || false,
+      estimatedCost: item.estimatedCost || 0
+    }));
+
+    await Item.insertMany(newItems);
+    return res.json({ success: true, count: newItems.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/lists/share/:listId - Public share checklist data retrieval
 router.get("/share/:listId", async (req, res, next) => {
   try {

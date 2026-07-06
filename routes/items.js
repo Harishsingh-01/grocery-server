@@ -48,6 +48,42 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+// GET /api/items/recent - Get most recent quantity and unit for a specific item name
+router.get("/recent", async (req, res, next) => {
+  try {
+    const { familyCode, name } = req.query;
+
+    if (!familyCode || !name) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const family = await Family.findOne({ code: familyCode.toUpperCase() });
+    if (!family) {
+      return res.status(404).json({ error: "Family not found" });
+    }
+
+    const normalizedName = name.toLowerCase().trim();
+    const lastItem = await Item.findOne({
+      familyId: family._id,
+      name: { $regex: new RegExp(`^${normalizedName}$`, "i") }
+    }).sort({ createdAt: -1 });
+
+    if (!lastItem) {
+      return res.json({ found: false });
+    }
+
+    return res.json({
+      found: true,
+      quantity: lastItem.quantity,
+      unit: lastItem.unit,
+      categoryId: lastItem.categoryId,
+      estimatedCost: lastItem.estimatedCost
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/items - Add item to list
 router.post("/", async (req, res, next) => {
   try {

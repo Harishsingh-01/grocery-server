@@ -34,6 +34,14 @@ app.use("/api/lists", require("./routes/lists"));
 app.use("/api/history", require("./routes/history"));
 app.use("/api/sync", require("./routes/sync"));
 
+// Health check endpoints for cron robots
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+app.get("/api/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error("Unhandled Error:", err);
